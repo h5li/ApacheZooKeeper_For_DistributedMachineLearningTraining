@@ -7,16 +7,16 @@ import org.apache.zookeeper.CreateMode;
 class PSManager {
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
         if (args.length < 1) {
-            System.err.println("USAGE: Executor [host:port ...]");
+            System.err.println("USAGE: PSManager [host:port ...]");
             System.exit(2);
         }
 
         String addrs = args[0];
         for (int i = 1; i < args.length; i++)
             addrs += "," + args[i];
+        ZooKeeper zk = new ZooKeeper(addrs, 3000, null);
 
         // 1. create the znodes
-        ZooKeeper zk = new ZooKeeper(addrs, 3000, null);
         int done = 0;
         for (String arg : args)
             zk.create("/w", null, null, CreateMode.EPHEMERAL_SEQUENTIAL);
