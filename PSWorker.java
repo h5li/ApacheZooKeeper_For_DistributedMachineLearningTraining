@@ -4,58 +4,63 @@ import java.util.*;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.Code;
+import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.AsyncCallback.DataCallback;
 import org.apache.zookeeper.data.Stat;
 
 class PSWorker implements DataCallback {
-    public float[] vector;
+    public ZooKeeper zk;
+    public int id;
 
-    public PSWorker() {
-        this.vector = null;
+    public PSWorker(String addrs, int id) throws KeeperException, IOException {
+        this.zk = new ZooKeeper(addrs, 3000, null);
+        this.id = id;
     }
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
         if (args.length < 2) {
-            System.err.println("USAGE: PSWorker workerNumber [host:port ...]");
+            System.err.println("USAGE: PSWorker workerNumber numEpochs dataFile [host:port ...]");
             System.exit(2);
         }
 
         int workerId = Integer.parseInt(args[0]);
-        String addrs = args[1];
-        for (int i = 2; i < args.length; i++)
+        int numEpochs = Integer.parseInt(args[1]);
+        String addrs = args[3];
+        for (int i = 4; i < args.length; i++)
             addrs += "," + args[i];
-        ZooKeeper zk = new ZooKeeper(addrs, 3000, null);
-        PSWorker worker = new PSWorker();
-        while(zk.exists("/start", false) == null);
-        zk.getData("/m", true, worker, null);
+        PSWorker worker = new PSWorker(addrs, workerId);
+        
+        for(int k = 0; k < numEpochs; k++) {
+            while(worker.zk.exists("/start" + k, false) == null);
+            worker.zk.getData("/m", true, worker, null);
 
-        // 1. Execute training script
-        ProcessBuilder pb = new ProcessBuilder("python", "train.py");
-        Process process = pb.start();
-        if (process.waitFor() != 0)
-            return;
+            ProcessBuilder pb = new ProcessBuilder("python", "train.py", args[2]);
+            Process process = pb.start();
+            if (process.waitFor() != 0)
+                return;
 
-        // 2. Read params
-        List<Float> params = new ArrayList<Float>();
-        try {
-            File file = new File("params.txt");
-            Scanner scanner = new Scanner(file);
-            while (scanner.hasNextFloat()) {
-                params.add(scanner.nextFloat());
+            List<Float> params = new ArrayList<Float>();
+            try {
+                File file = new File("params.txt");
+                Scanner scanner = new Scanner(file);
+                while (scanner.hasNextFloat()) {
+                    params.add(scanner.nextFloat());
+                }
+                file.delete();
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-            file.delete();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
 
-        // 3. Convert params to byte array and write the data to znode with the same
-        // workerId
-        byte[] vector = new byte[params.size() * 4];
-        for (int i = 0; i < params.size(); i++) {
-            byte[] byteRep = ByteBuffer.allocate(4).putFloat(params.get(i)).array();
-            for (int j = 0; j < 4; j++)
-                vector[4 * i + j] = byteRep[j];
+            byte[] vector = new byte[params.size() * 4];
+            for (int i = 0; i < params.size(); i++) {
+                byte[] byteRep = ByteBuffer.allocate(4).putFloat(params.get(i)).array();
+                for (int j = 0; j < 4; j++)
+                    vector[4 * i + j] = byteRep[j];
+            }
+            worker.zk.setData("/w" + workerId, vector, -1);
+
+            while(worker.zk.exists("/end" + k, false) == null);
+            worker.zk.delete("/ack" + worker.id, -1);
         }
-        zk.setData("/w" + workerId, vector, -1);
     }
 
     // 4. Get the average gradient from the manager znode
@@ -65,8 +70,22 @@ class PSWorker implements DataCallback {
             return;
         }
 
-        this.vector = new float[data.length / 4];
-        for (int j = 0; j < this.vector.length; j++)
-            this.vector[j] = ByteBuffer.wrap(data, 4 * j, 4).getFloat();
+        try {
+            FileWriter fw = new FileWriter(new File("params.txt"), false);
+            for (int j = 0; j < data.length / 4; j++) {
+                fw.write(ByteBuffer.wrap(data, 4 * j, 4).getFloat() + "\n");
+            }
+            fw.close();
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        try {
+            this.zk.create("/ack" + this.id, null, null, CreateMode.PERSISTENT);
+        }
+        catch(Exception e) {
+            e.printStackTrace();
+        }
     }
 }
