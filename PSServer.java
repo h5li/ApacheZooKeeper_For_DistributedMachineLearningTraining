@@ -9,13 +9,13 @@ import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.AsyncCallback.StatCallback;
 import org.apache.zookeeper.data.Stat;
 
-class PSManager implements Watcher, StatCallback {
+class PSServer implements Watcher, StatCallback {
     public ZooKeeper zk;
     public float[] gradient;
     public int numWorkers;
     public int numDone;
 
-    public PSManager(int numWorkers, String addrs) throws KeeperException, IOException {
+    public PSServer(int numWorkers, String addrs) throws KeeperException, IOException {
         this.gradient = null;
         this.numWorkers = numWorkers;
         this.zk = new ZooKeeper(addrs, 3000, this);
@@ -23,7 +23,7 @@ class PSManager implements Watcher, StatCallback {
 
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
         if (args.length < 2) {
-            System.err.println("USAGE: PSManager numWorkers numEpochs [host:port ...]");
+            System.err.println("USAGE: PSServer numWorkers numEpochs [host:port ...]");
             System.exit(2);
         }
 
@@ -32,39 +32,39 @@ class PSManager implements Watcher, StatCallback {
         String addrs = args[2];
         for (int i = 3; i < args.length; i++)
             addrs += "," + args[i];
-        PSManager manager = new PSManager(numWorkers, addrs);
+        PSServer server = new PSServer(numWorkers, addrs);
 
-        if (manager.zk.exists("/m", false) == null)
-            manager.zk.create("/m", null, null, CreateMode.PERSISTENT);
+        if (server.zk.exists("/m", false) == null)
+            server.zk.create("/m", null, null, CreateMode.PERSISTENT);
         for (int i = 0; i < numWorkers; i++) {
             String path = "/w" + i;
-            if (manager.zk.exists(path, false) == null)
-                manager.zk.create(path, null, null, CreateMode.PERSISTENT);
+            if (server.zk.exists(path, false) == null)
+                server.zk.create(path, null, null, CreateMode.PERSISTENT);
         }
 
         for (int k = 0; k < numEpochs; k++) {
             for (int i = 0; i < numWorkers; i++)
-                manager.zk.exists("/w" + i, true, manager, null);
-            manager.numDone = 0;
+                server.zk.exists("/w" + i, true, server, null);
+            server.numDone = 0;
 
-            manager.zk.create("/start" + k, null, null, CreateMode.PERSISTENT);
+            server.zk.create("/start" + k, null, null, CreateMode.PERSISTENT);
             if (k > 0)
-                manager.zk.delete("/end" + (k - 1), -1);
-            while (manager.numDone != numWorkers);
+                server.zk.delete("/end" + (k - 1), -1);
+            while (server.numDone != numWorkers);
 
-            byte[] vector = new byte[manager.gradient.length * 4];
-            for (int i = 0; i < manager.gradient.length; i++) {
-                byte[] byteRep = ByteBuffer.allocate(4).putFloat(manager.gradient[i]).array();
+            byte[] vector = new byte[server.gradient.length * 4];
+            for (int i = 0; i < server.gradient.length; i++) {
+                byte[] byteRep = ByteBuffer.allocate(4).putFloat(server.gradient[i]).array();
                 for (int j = 0; j < 4; j++)
                     vector[4 * i + j] = byteRep[j];
             }
-            manager.zk.setData("/m", vector, -1);
+            server.zk.setData("/m", vector, -1);
             for (int i = 0; i < numWorkers; i++) {
-                while (manager.zk.exists("/ack" + i, false) == null);
+                while (server.zk.exists("/ack" + i, false) == null);
             }
 
-            manager.zk.delete("/start" + k, -1);
-            manager.zk.create("/end" + k, null, null, CreateMode.PERSISTENT);
+            server.zk.delete("/start" + k, -1);
+            server.zk.create("/end" + k, null, null, CreateMode.PERSISTENT);
         }
     }
 
