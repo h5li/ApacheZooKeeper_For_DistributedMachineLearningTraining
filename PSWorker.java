@@ -33,26 +33,25 @@ class PSWorker implements DataCallback {
             while(worker.zk.exists("/start" + k, false) == null);
             worker.zk.getData("/m", true, worker, null);
 
-            ProcessBuilder pb = new ProcessBuilder("python", "train.py", args[2]);
+            ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[2]);
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
 
-            List<Float> params = new ArrayList<Float>();
+            List<Float> grads = new ArrayList<Float>();
             try {
-                File file = new File("params.txt");
+                File file = new File("grads.txt");
                 Scanner scanner = new Scanner(file);
                 while (scanner.hasNextFloat()) {
-                    params.add(scanner.nextFloat());
+                    grads.add(scanner.nextFloat());
                 }
-                file.delete();
             } catch (Exception e) {
                 e.printStackTrace();
             }
 
-            byte[] vector = new byte[params.size() * 4];
-            for (int i = 0; i < params.size(); i++) {
-                byte[] byteRep = ByteBuffer.allocate(4).putFloat(params.get(i)).array();
+            byte[] vector = new byte[grads.size() * 4];
+            for (int i = 0; i < grads.size(); i++) {
+                byte[] byteRep = ByteBuffer.allocate(4).putFloat(grads.get(i)).array();
                 for (int j = 0; j < 4; j++)
                     vector[4 * i + j] = byteRep[j];
             }
@@ -71,7 +70,7 @@ class PSWorker implements DataCallback {
         }
 
         try {
-            FileWriter fw = new FileWriter(new File("params.txt"), false);
+            FileWriter fw = new FileWriter(new File("grads.txt"), false);
             for (int j = 0; j < data.length / 4; j++) {
                 fw.write(ByteBuffer.wrap(data, 4 * j, 4).getFloat() + "\n");
             }
@@ -82,6 +81,10 @@ class PSWorker implements DataCallback {
         }
 
         try {
+            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py");
+            Process process = pb.start();
+            if (process.waitFor() != 0)
+                return;
             this.zk.create("/ack" + this.id, null, null, CreateMode.PERSISTENT);
         }
         catch(Exception e) {

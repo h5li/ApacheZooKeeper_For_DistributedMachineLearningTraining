@@ -8,14 +8,12 @@ import org.apache.zookeeper.AsyncCallback.DataCallback;
 import org.apache.zookeeper.data.Stat;
 
 class PSManager implements DataCallback {
-    public float[][] grid;
-    public int numParams;
+    public float[] gradient;
     public int numWorkers;
     public int numDone;
 
     public PSManager(int numWorkers) {
-        this.grid = null;
-        this.numParams = 0;
+        this.gradient = null;
         this.numWorkers = numWorkers;
     }
 
@@ -50,20 +48,15 @@ class PSManager implements DataCallback {
                 zk.delete("/end" + (k - 1), -1);
             while (manager.numDone != numWorkers);
 
-            byte[] vector = new byte[manager.numParams * 4];
-            for (int i = 0; i < manager.numParams; i++) {
-                float sum = 0;
-                for (int j = 0; j < numWorkers; j++)
-                    sum += manager.grid[j][i];
-                float val = sum / numWorkers;
-
-                byte[] byteRep = ByteBuffer.allocate(4).putFloat(val).array();
+            byte[] vector = new byte[manager.gradient.length * 4];
+            for (int i = 0; i < manager.gradient.length; i++) {
+                byte[] byteRep = ByteBuffer.allocate(4).putFloat(manager.gradient[i]).array();
                 for (int j = 0; j < 4; j++)
                     vector[4 * i + j] = byteRep[j];
             }
             zk.setData("/m", vector, -1);
             for (int i = 0; i < numWorkers; i++) {
-                while(zk.exists("/ack" + i, false) == null);
+                while (zk.exists("/ack" + i, false) == null);
             }
 
             zk.delete("/start" + k, -1);
@@ -77,12 +70,15 @@ class PSManager implements DataCallback {
             return;
         }
 
-        if (this.grid == null) {
-            this.numParams = data.length / 4;
-            this.grid = new float[this.numWorkers][this.numParams];
+        if (this.gradient == null)
+            this.gradient = new float[data.length / 4];
+        if (this.numDone == 0) {
+            for (int j = 0; j < this.gradient.length; j++)
+                this.gradient[j] = ByteBuffer.wrap(data, 4 * j, 4).getFloat();
+        } else {
+            for (int j = 0; j < this.gradient.length; j++)
+                this.gradient[j] += ByteBuffer.wrap(data, 4 * j, 4).getFloat();
         }
-        for (int j = 0; j < this.numParams; j++)
-            this.grid[this.numDone][j] = ByteBuffer.wrap(data, 4 * j, 4).getFloat();
         this.numDone++;
     }
 }
