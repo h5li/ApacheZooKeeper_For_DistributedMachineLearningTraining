@@ -5,15 +5,17 @@ import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.Code;
 import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.AsyncCallback.DataCallback;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.AsyncCallback.StatCallback;
 import org.apache.zookeeper.data.Stat;
 
-class PSWorker implements DataCallback {
+class PSWorker implements Watcher, StatCallback {
     public ZooKeeper zk;
     public int id;
 
     public PSWorker(String addrs, int id) throws KeeperException, IOException {
-        this.zk = new ZooKeeper(addrs, 3000, null);
+        this.zk = new ZooKeeper(addrs, 3000, this);
         this.id = id;
     }
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
@@ -31,7 +33,7 @@ class PSWorker implements DataCallback {
         
         for(int k = 0; k < numEpochs; k++) {
             while(worker.zk.exists("/start" + k, false) == null);
-            worker.zk.getData("/m", true, worker, null);
+            worker.zk.exists("/m", true, worker, null);
 
             ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[2]);
             Process process = pb.start();
@@ -62,25 +64,16 @@ class PSWorker implements DataCallback {
         }
     }
 
-    // 4. Get the average gradient from the manager znode
-    public void processResult(int rc, String path, Object ctx, byte[] data, Stat stat) {
-        if (rc != Code.OK.intValue()) {
-            System.out.println("Something's wrong");
-            return;
-        }
-
+    public void process(WatchedEvent event) {
         try {
+            byte[] data = this.zk.getData(event.getPath(), false, this.zk.exists(event.getPath(), false));
+
             FileWriter fw = new FileWriter(new File("grads.txt"), false);
             for (int j = 0; j < data.length / 4; j++) {
                 fw.write(ByteBuffer.wrap(data, 4 * j, 4).getFloat() + "\n");
             }
             fw.close();
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-        }
 
-        try {
             ProcessBuilder pb = new ProcessBuilder("python", "update_params.py");
             Process process = pb.start();
             if (process.waitFor() != 0)
@@ -89,6 +82,12 @@ class PSWorker implements DataCallback {
         }
         catch(Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    public void processResult(int rc, String path, Object ctx, Stat stat) {
+        if (rc != Code.OK.intValue()) {
+            System.out.println("Something's wrong: " + path);
         }
     }
 }

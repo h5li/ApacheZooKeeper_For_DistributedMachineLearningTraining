@@ -3,18 +3,22 @@ import java.nio.ByteBuffer;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.Code;
+import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.AsyncCallback.DataCallback;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.AsyncCallback.StatCallback;
 import org.apache.zookeeper.data.Stat;
 
-class PSManager implements DataCallback {
+class PSManager implements Watcher, StatCallback {
+    public ZooKeeper zk;
     public float[] gradient;
     public int numWorkers;
     public int numDone;
 
-    public PSManager(int numWorkers) {
+    public PSManager(int numWorkers, String addrs) throws KeeperException, IOException {
         this.gradient = null;
         this.numWorkers = numWorkers;
+        this.zk = new ZooKeeper(addrs, 3000, this);
     }
 
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
@@ -28,24 +32,24 @@ class PSManager implements DataCallback {
         String addrs = args[2];
         for (int i = 3; i < args.length; i++)
             addrs += "," + args[i];
-        ZooKeeper zk = new ZooKeeper(addrs, 3000, null);
-        PSManager manager = new PSManager(numWorkers);
+        PSManager manager = new PSManager(numWorkers, addrs);
 
-        if (zk.exists("/m", false) == null)
-            zk.create("/m", null, null, CreateMode.PERSISTENT);
+        if (manager.zk.exists("/m", false) == null)
+            manager.zk.create("/m", null, null, CreateMode.PERSISTENT);
         for (int i = 0; i < numWorkers; i++) {
             String path = "/w" + i;
-            zk.create(path, null, null, CreateMode.PERSISTENT);
+            if (manager.zk.exists(path, false) == null)
+                manager.zk.create(path, null, null, CreateMode.PERSISTENT);
         }
 
         for (int k = 0; k < numEpochs; k++) {
             for (int i = 0; i < numWorkers; i++)
-                zk.getData("/w" + i, true, manager, null);
+                manager.zk.exists("/w" + i, true, manager, null);
             manager.numDone = 0;
 
-            zk.create("/start" + k, null, null, CreateMode.PERSISTENT);
+            manager.zk.create("/start" + k, null, null, CreateMode.PERSISTENT);
             if (k > 0)
-                zk.delete("/end" + (k - 1), -1);
+                manager.zk.delete("/end" + (k - 1), -1);
             while (manager.numDone != numWorkers);
 
             byte[] vector = new byte[manager.gradient.length * 4];
@@ -54,31 +58,39 @@ class PSManager implements DataCallback {
                 for (int j = 0; j < 4; j++)
                     vector[4 * i + j] = byteRep[j];
             }
-            zk.setData("/m", vector, -1);
+            manager.zk.setData("/m", vector, -1);
             for (int i = 0; i < numWorkers; i++) {
-                while (zk.exists("/ack" + i, false) == null);
+                while (manager.zk.exists("/ack" + i, false) == null);
             }
 
-            zk.delete("/start" + k, -1);
-            zk.create("/end" + k, null, null, CreateMode.PERSISTENT);
+            manager.zk.delete("/start" + k, -1);
+            manager.zk.create("/end" + k, null, null, CreateMode.PERSISTENT);
         }
     }
 
-    public void processResult(int rc, String path, Object ctx, byte[] data, Stat stat) {
-        if (rc != Code.OK.intValue()) {
-            System.out.println("Something's wrong");
-            return;
-        }
+    public void process(WatchedEvent event) {
+        try {
+            byte[] data = this.zk.getData(event.getPath(), false, this.zk.exists(event.getPath(), false));
 
-        if (this.gradient == null)
-            this.gradient = new float[data.length / 4];
-        if (this.numDone == 0) {
-            for (int j = 0; j < this.gradient.length; j++)
-                this.gradient[j] = ByteBuffer.wrap(data, 4 * j, 4).getFloat();
-        } else {
-            for (int j = 0; j < this.gradient.length; j++)
-                this.gradient[j] += ByteBuffer.wrap(data, 4 * j, 4).getFloat();
+            if (this.gradient == null)
+                this.gradient = new float[data.length / 4];
+            if (this.numDone == 0) {
+                for (int j = 0; j < this.gradient.length; j++)
+                    this.gradient[j] = ByteBuffer.wrap(data, 4 * j, 4).getFloat();
+            } else {
+                for (int j = 0; j < this.gradient.length; j++)
+                    this.gradient[j] += ByteBuffer.wrap(data, 4 * j, 4).getFloat();
+            }
+            this.numDone++;
         }
-        this.numDone++;
+        catch(Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void processResult(int rc, String path, Object ctx, Stat stat) {
+        if (rc != Code.OK.intValue()) {
+            System.out.println("Something's wrong: " + path);
+        }
     }
 }
