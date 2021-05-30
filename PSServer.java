@@ -16,7 +16,7 @@ class PSServer implements Watcher, StatCallback {
     public int numDone;
 
     public PSServer(int numWorkers, String addrs) throws KeeperException, IOException {
-        this.gradient = null;
+        this.gradient = new float[785];
         this.numWorkers = numWorkers;
         this.zk = new ZooKeeper(addrs, 3000, this);
     }
@@ -68,12 +68,10 @@ class PSServer implements Watcher, StatCallback {
         }
     }
 
-    public void process(WatchedEvent event) {
+    public synchronized void process(WatchedEvent event) {
         try {
             byte[] data = this.zk.getData(event.getPath(), false, this.zk.exists(event.getPath(), false));
 
-            if (this.gradient == null)
-                this.gradient = new float[data.length / 4];
             if (this.numDone == 0) {
                 for (int j = 0; j < this.gradient.length; j++)
                     this.gradient[j] = ByteBuffer.wrap(data, 4 * j, 4).getFloat();
