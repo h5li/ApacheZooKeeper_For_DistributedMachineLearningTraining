@@ -108,7 +108,7 @@ class HOWorker implements Watcher, StatCallback {
         // This condition means all the data needs to get the updated all the grad.
         FileWriter fw = new FileWriter(new File("grads.txt"), false);
         for (int j = 0; j < this.grads; j++) {
-            fw.write(this.grads.get(j) + "\n");
+            fw.write(this.grads.get(j)/4 + "\n");
         }
         fw.close();
 
