@@ -22,7 +22,7 @@ class PSServer implements Watcher, StatCallback {
     }
 
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
-        if (args.length < 2) {
+        if (args.length < 3) {
             System.err.println("USAGE: PSServer numWorkers numEpochs [host:port ...]");
             System.exit(2);
         }

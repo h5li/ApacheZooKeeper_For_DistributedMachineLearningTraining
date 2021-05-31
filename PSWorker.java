@@ -19,7 +19,7 @@ class PSWorker implements Watcher, StatCallback {
         this.id = id;
     }
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
-        if (args.length < 2) {
+        if (args.length < 4) {
             System.err.println("USAGE: PSWorker workerNumber numEpochs dataFile [host:port ...]");
             System.exit(2);
         }

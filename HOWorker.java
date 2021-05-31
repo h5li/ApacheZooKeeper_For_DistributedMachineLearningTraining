@@ -15,16 +15,18 @@ class HOWorker implements Watcher, StatCallback {
     public int id;
     public int numWorker;
     public List<Float> grads;
+    public int curr_iter;
 
     public HOWorker(String addrs, int id, int numWorker) throws KeeperException, IOException {
         this.zk = new ZooKeeper(addrs, 3000, this);
         this.id = id;
         this.numWorker = numWorker;
-        this.grad = null;
+        this.grads = null;
         this.curr_iter = 0;
     }
+
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
-        if (args.length < 2) {
+        if (args.length < 5) {
             System.err.println("USAGE: HOWorker workerNumber numWorker numEpochs dataFile [host:port ...]");
             System.exit(2);
         }
@@ -42,11 +44,11 @@ class HOWorker implements Watcher, StatCallback {
         }
 
         for (int i = 0; i < numWorker; i++) {
-            while (manager.zk.exists("/w" + i, false) == null);
+            while (worker.zk.exists("/w" + i, false) == null);
         }
         
         for(int k = 0; k < numEpochs; k++) {
-            this.curr_iter = k;
+            worker.curr_iter = k;
             int previousWorkerIdToListen = worker.getWorkerIdToListen();
             worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
 
@@ -69,7 +71,7 @@ class HOWorker implements Watcher, StatCallback {
             worker.grads = grads;
             worker.writeGradToZnode(0);
             for (int i = 0; i < numWorker; i++) {
-                while (manager.zk.exists("/start" + i + "w" + k, false) == null);
+                while (worker.zk.exists("/start" + i + "w" + k, false) == null);
             }
         }
     }
@@ -82,15 +84,17 @@ class HOWorker implements Watcher, StatCallback {
         return list;
     }
 
-    private void writeGradToZnode(int statusCode) {
+    private void writeGradToZnode(int statusCode) throws KeeperException, InterruptedException {
         byte[] vector = new byte[this.grads.size() * 4+1];
         for (int i = 0; i < this.grads.size(); i++) {
             byte[] byteRep = ByteBuffer.allocate(4).putFloat(grads.get(i)).array();
             for (int j = 0; j < 4; j++)
                 vector[4 * i + j] = byteRep[j];
         }
-        vector[vector.length - 1] = statusCode;
-        worker.zk.setData("/w" + this.id, vector, -1);
+        byte[] byteRep = ByteBuffer.allocate(4).putInt(statusCode).array();
+        for (int j = 4; j > 0; j--)
+            vector[vector.length - j] = byteRep[4 - j];
+        this.zk.setData("/w" + this.id, vector, -1);
     }
 
     private int getWorkerIdToListen() {
@@ -106,17 +110,22 @@ class HOWorker implements Watcher, StatCallback {
 
     private void writeGradToFile() {
         // This condition means all the data needs to get the updated all the grad.
-        FileWriter fw = new FileWriter(new File("grads.txt"), false);
-        for (int j = 0; j < this.grads; j++) {
-            fw.write(this.grads.get(j) + "\n");
-        }
-        fw.close();
+        try {
+            FileWriter fw = new FileWriter(new File("grads.txt"), false);
+            for (int j = 0; j < this.grads.size(); j++) {
+                fw.write(this.grads.get(j) + "\n");
+            }
+            fw.close();
 
-        ProcessBuilder pb = new ProcessBuilder("python", "update_params.py");
-        Process process = pb.start();
-        if (process.waitFor() != 0)
-            return;
-        this.zk.create("/start" + this.id + "w" + this.curr_iter, null, null, CreateMode.PERSISTENT)
+            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py");
+            Process process = pb.start();
+            if (process.waitFor() != 0)
+                return;
+            this.zk.create("/start" + this.id + "w" + this.curr_iter, null, null, CreateMode.PERSISTENT);
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public void process(WatchedEvent event) {
