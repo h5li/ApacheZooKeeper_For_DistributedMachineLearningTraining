@@ -23,7 +23,7 @@ if os.path.exists('params.npy'):
     with open('params.npy', 'rb') as f:
         w = np.load(f)
 
-gradient = - 0.001 * np.matmul(X.T, h(w) - y)
+gradient = -0.00001 * np.sum(np.multiply(X, h(w) - y), axis=0)
 with open('grads.txt', 'w+') as f:
     for i in range(785):
-        f.write(str(gradient[i][0]) + '\n')
+        f.write(str(gradient[i]) + '\n')

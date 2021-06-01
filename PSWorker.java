@@ -2,6 +2,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.ZooDefs.*;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.Code;
 import org.apache.zookeeper.CreateMode;
@@ -9,14 +10,17 @@ import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.AsyncCallback.StatCallback;
 import org.apache.zookeeper.data.Stat;
+import org.apache.zookeeper.data.ACL;
 
 class PSWorker implements Watcher, StatCallback {
     public ZooKeeper zk;
     public int id;
+    public static final List<ACL> OPEN_ACL_UNSAFE = new LinkedList<ACL>();
 
     public PSWorker(String addrs, int id) throws KeeperException, IOException {
         this.zk = new ZooKeeper(addrs, 3000, this);
         this.id = id;
+        OPEN_ACL_UNSAFE.add(new ACL(Perms.ALL, Ids.ANYONE_ID_UNSAFE));
     }
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
         if (args.length < 4) {
@@ -40,22 +44,22 @@ class PSWorker implements Watcher, StatCallback {
             if (process.waitFor() != 0)
                 return;
 
-            List<Float> grads = new ArrayList<Float>();
+            List<Double> grads = new ArrayList<Double>();
             try {
                 File file = new File("grads.txt");
                 Scanner scanner = new Scanner(file);
-                while (scanner.hasNextFloat()) {
-                    grads.add(scanner.nextFloat());
+                while (scanner.hasNextDouble()) {
+                    grads.add(scanner.nextDouble());
                 }
             } catch (Exception e) {
                 e.printStackTrace();
             }
 
-            byte[] vector = new byte[grads.size() * 4];
+            byte[] vector = new byte[grads.size() * 8];
             for (int i = 0; i < grads.size(); i++) {
-                byte[] byteRep = ByteBuffer.allocate(4).putFloat(grads.get(i)).array();
-                for (int j = 0; j < 4; j++)
-                    vector[4 * i + j] = byteRep[j];
+                byte[] byteRep = ByteBuffer.allocate(8).putDouble(grads.get(i)).array();
+                for (int j = 0; j < 8; j++)
+                    vector[8 * i + j] = byteRep[j];
             }
             worker.zk.setData("/w" + workerId, vector, -1);
 
@@ -65,12 +69,15 @@ class PSWorker implements Watcher, StatCallback {
     }
 
     public void process(WatchedEvent event) {
+        if (event.getPath() == null)
+            return;
+
         try {
             byte[] data = this.zk.getData(event.getPath(), false, this.zk.exists(event.getPath(), false));
 
             FileWriter fw = new FileWriter(new File("grads.txt"), false);
-            for (int j = 0; j < data.length / 4; j++) {
-                fw.write(ByteBuffer.wrap(data, 4 * j, 4).getFloat() + "\n");
+            for (int j = 0; j < data.length / 8; j++) {
+                fw.write(ByteBuffer.wrap(data, 8 * j, 8).getDouble() + "\n");
             }
             fw.close();
 
@@ -78,7 +85,7 @@ class PSWorker implements Watcher, StatCallback {
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
-            this.zk.create("/ack" + this.id, null, null, CreateMode.PERSISTENT);
+            this.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         catch(Exception e) {
             e.printStackTrace();

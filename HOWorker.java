@@ -2,6 +2,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.ZooDefs.*;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.Code;
 import org.apache.zookeeper.CreateMode;
@@ -9,13 +10,15 @@ import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.AsyncCallback.StatCallback;
 import org.apache.zookeeper.data.Stat;
+import org.apache.zookeeper.data.ACL;
 
 class HOWorker implements Watcher, StatCallback {
     public ZooKeeper zk;
     public int id;
     public int numWorker;
-    public List<Float> grads;
+    public List<Double> grads;
     public int curr_iter;
+    public static final List<ACL> OPEN_ACL_UNSAFE = new LinkedList<ACL>();
 
     public HOWorker(String addrs, int id, int numWorker) throws KeeperException, IOException {
         this.zk = new ZooKeeper(addrs, 3000, this);
@@ -23,6 +26,7 @@ class HOWorker implements Watcher, StatCallback {
         this.numWorker = numWorker;
         this.grads = null;
         this.curr_iter = 0;
+        OPEN_ACL_UNSAFE.add(new ACL(Perms.ALL, Ids.ANYONE_ID_UNSAFE));
     }
 
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
@@ -35,12 +39,12 @@ class HOWorker implements Watcher, StatCallback {
         int numEpochs = Integer.parseInt(args[2]);
         int numWorker = Integer.parseInt(args[1]);
         String addrs = args[4];
-        for (int i = 4; i < args.length; i++)
+        for (int i = 5; i < args.length; i++)
             addrs += "," + args[i];
         HOWorker worker = new HOWorker(addrs, workerId, numWorker);
         
         if (worker.zk.exists("/w" + workerId, false) == null) {
-            worker.zk.create("/w" + workerId, null, null, CreateMode.PERSISTENT);
+            worker.zk.create("/w" + workerId, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
 
         for (int i = 0; i < numWorker; i++) {
@@ -57,12 +61,12 @@ class HOWorker implements Watcher, StatCallback {
             if (process.waitFor() != 0)
                 return;
 
-            List<Float> grads = new ArrayList<Float>();
+            List<Double> grads = new ArrayList<Double>();
             try {
                 File file = new File("grads.txt");
                 Scanner scanner = new Scanner(file);
-                while (scanner.hasNextFloat()) {
-                    grads.add(scanner.nextFloat());
+                while (scanner.hasNextDouble()) {
+                    grads.add(scanner.nextDouble());
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -76,24 +80,24 @@ class HOWorker implements Watcher, StatCallback {
         }
     }
 
-    private List<Float> convertByteToFloat(byte[] data) {
-        List<Float> list = new ArrayList<>();
-        for (int j = 0; j < data.length / 4; j++) {
-            list.add(ByteBuffer.wrap(data, 4 * j, 4).getFloat());
+    private List<Double> convertByteToDouble(byte[] data) {
+        List<Double> list = new ArrayList<>();
+        for (int j = 0; j < data.length / 8; j++) {
+            list.add(ByteBuffer.wrap(data, 8 * j, 8).getDouble());
         }
         return list;
     }
 
     private void writeGradToZnode(int statusCode) throws KeeperException, InterruptedException {
-        byte[] vector = new byte[this.grads.size() * 4+1];
+        byte[] vector = new byte[this.grads.size() * 8 + 1];
         for (int i = 0; i < this.grads.size(); i++) {
-            byte[] byteRep = ByteBuffer.allocate(4).putFloat(grads.get(i)).array();
-            for (int j = 0; j < 4; j++)
-                vector[4 * i + j] = byteRep[j];
+            byte[] byteRep = ByteBuffer.allocate(8).putDouble(grads.get(i)).array();
+            for (int j = 0; j < 8; j++)
+                vector[8 * i + j] = byteRep[j];
         }
-        byte[] byteRep = ByteBuffer.allocate(4).putInt(statusCode).array();
-        for (int j = 4; j > 0; j--)
-            vector[vector.length - j] = byteRep[4 - j];
+        byte[] byteRep = ByteBuffer.allocate(8).putInt(statusCode).array();
+        for (int j = 8; j > 0; j--)
+            vector[vector.length - j] = byteRep[8 - j];
         this.zk.setData("/w" + this.id, vector, -1);
     }
 
@@ -121,7 +125,7 @@ class HOWorker implements Watcher, StatCallback {
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
-            this.zk.create("/start" + this.id + "w" + this.curr_iter, null, null, CreateMode.PERSISTENT);
+            this.zk.create("/start" + this.id + "w" + this.curr_iter, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         catch (Exception e) {
             e.printStackTrace();
@@ -129,13 +133,16 @@ class HOWorker implements Watcher, StatCallback {
     }
 
     public void process(WatchedEvent event) {
+        if (event.getPath() == null)
+            return;
+
         try {
             byte[] data = this.zk.getData(event.getPath(), false, this.zk.exists(event.getPath(), false));
 
             if (data[data.length - 1] == 0 ) {
                 
                 if (this.id == 1) {
-                    List<Float> previousGrad = this.convertByteToFloat(data);
+                    List<Double> previousGrad = this.convertByteToDouble(data);
                     for (int i = 0; i < previousGrad.size(); i++) {
                         this.grads.set(i, this.grads.get(i) + previousGrad.get(i));
                     }
@@ -144,13 +151,13 @@ class HOWorker implements Watcher, StatCallback {
             }
             else if (data[data.length - 1] == 1) {
                 if (this.id == 0) {
-                    List<Float> previousGrad = this.convertByteToFloat(data);
+                    List<Double> previousGrad = this.convertByteToDouble(data);
                     this.grads = previousGrad;
                     this.writeGradToZnode(2);
                     this.writeGradToFile();
                 }
                 else {
-                    List<Float> previousGrad = this.convertByteToFloat(data);
+                    List<Double> previousGrad = this.convertByteToDouble(data);
                     for (int i = 0; i < previousGrad.size(); i++) {
                         this.grads.set(i, this.grads.get(i) + previousGrad.get(i));
                     }
@@ -162,16 +169,16 @@ class HOWorker implements Watcher, StatCallback {
                 }
             }
             else if(this.id > 0 && this.id < this.numWorker -1 ) {
-                List<Float> previousGrad = this.convertByteToFloat(data);
+                List<Double> previousGrad = this.convertByteToDouble(data);
                 this.grads = previousGrad;
                 this.writeGradToZnode(2);
                 this.writeGradToFile();
             }
 
-            //worker.zk.create();
+            // worker.zk.create();
             int previousWorkerIdToListen = this.getWorkerIdToListen();
             this.zk.exists("/w" + previousWorkerIdToListen, true, this, null);
-            // this.zk.create("/ack" + this.id, null, null, CreateMode.PERSISTENT);
+            // worker.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         catch(Exception e) {
             e.printStackTrace();
