@@ -12,6 +12,7 @@ import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.AsyncCallback.StatCallback;
 import org.apache.zookeeper.data.Stat;
 import org.apache.zookeeper.data.ACL;
+import java.lang.Thread;
 
 class PSServer implements Watcher, StatCallback {
     public ZooKeeper zk;
@@ -39,7 +40,24 @@ class PSServer implements Watcher, StatCallback {
         for (int i = 3; i < args.length; i++)
             addrs += "," + args[i];
         PSServer server = new PSServer(numWorkers, addrs);
-
+        try {
+            Thread.sleep(3000);
+        } 
+        catch(InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
+        while(true) {
+            try {
+                System.out.println(server.zk.getState());
+                server.zk.exists("/m", false);
+                System.out.println("Success");
+                break;
+            }
+            catch (Exception e) {
+                System.out.println("Exception");
+                Thread.sleep(1000);
+            }
+        }
         if (server.zk.exists("/m", false) == null)
             server.zk.create("/m", null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         for (int i = 0; i < numWorkers; i++) {
