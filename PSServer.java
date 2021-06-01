@@ -1,6 +1,9 @@
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.ArrayList;
 import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.ZooDefs.*;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.Code;
 import org.apache.zookeeper.WatchedEvent;
@@ -8,12 +11,15 @@ import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.AsyncCallback.StatCallback;
 import org.apache.zookeeper.data.Stat;
+import org.apache.zookeeper.data.ACL;
 
 class PSServer implements Watcher, StatCallback {
     public ZooKeeper zk;
     public float[] gradient;
     public int numWorkers;
     public int numDone;
+    public static final ArrayList<ACL> OPEN_ACL_UNSAFE = new ArrayList<ACL>(
+        Collections.singletonList(new ACL(Perms.ALL, Ids.ANYONE_ID_UNSAFE)));
 
     public PSServer(int numWorkers, String addrs) throws KeeperException, IOException {
         this.gradient = new float[785];
@@ -35,19 +41,19 @@ class PSServer implements Watcher, StatCallback {
         PSServer server = new PSServer(numWorkers, addrs);
 
         if (server.zk.exists("/m", false) == null)
-            server.zk.create("/m", null, null, CreateMode.PERSISTENT);
+            server.zk.create("/m", null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         for (int i = 0; i < numWorkers; i++) {
             String path = "/w" + i;
             if (server.zk.exists(path, false) == null)
-                server.zk.create(path, null, null, CreateMode.PERSISTENT);
+                server.zk.create(path, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
 
         for (int k = 0; k < numEpochs; k++) {
             for (int i = 0; i < numWorkers; i++)
                 server.zk.exists("/w" + i, true, server, null);
             server.numDone = 0;
-
-            server.zk.create("/start" + k, null, null, CreateMode.PERSISTENT);
+	    if (server.zk.exists("/start" + k, false) == null)
+                server.zk.create("/start" + k, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
             if (k > 0)
                 server.zk.delete("/end" + (k - 1), -1);
             while (server.numDone != numWorkers);
@@ -69,6 +75,7 @@ class PSServer implements Watcher, StatCallback {
     }
 
     public synchronized void process(WatchedEvent event) {
+	if (event.getPath() == null) return;
         try {
             byte[] data = this.zk.getData(event.getPath(), false, this.zk.exists(event.getPath(), false));
 
