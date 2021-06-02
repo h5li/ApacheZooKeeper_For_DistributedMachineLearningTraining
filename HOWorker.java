@@ -125,7 +125,10 @@ class HOWorker implements Watcher, StatCallback {
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
-            this.zk.create("/start" + this.id + "w" + this.curr_iter, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+
+            String path = "/start" + this.id + "w" + this.curr_iter;
+            if (this.zk.exists(path, false) == null)
+                this.zk.create(path, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         catch (Exception e) {
             e.printStackTrace();

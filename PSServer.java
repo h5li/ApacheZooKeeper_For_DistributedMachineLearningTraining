@@ -70,7 +70,8 @@ class PSServer implements Watcher, StatCallback {
             }
 
             server.zk.delete("/start" + k, -1);
-            server.zk.create("/end" + k, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            if (server.zk.exists("/end", false) == null)
+                server.zk.create("/end" + k, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
     }
 
