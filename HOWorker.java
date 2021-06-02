@@ -121,7 +121,7 @@ class HOWorker implements Watcher, StatCallback {
             }
             fw.close();
 
-            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py", this.id);
+            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py", "" + this.id);
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
