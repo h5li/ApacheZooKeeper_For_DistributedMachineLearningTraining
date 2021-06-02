@@ -34,7 +34,6 @@ class PSServer implements Watcher, StatCallback {
 
         int numWorkers = Integer.parseInt(args[0]);
         int numEpochs = Integer.parseInt(args[1]);
-	System.out.println(numWorkers + " : " + numEpochs);
         String addrs = args[2];
         for (int i = 3; i < args.length; i++)
             addrs += "," + args[i];
@@ -59,8 +58,8 @@ class PSServer implements Watcher, StatCallback {
             if (k > 0)
                 server.zk.delete("/end" + (k - 1), -1);
             while (server.numDone != numWorkers) {
-	    	//System.out.println("Waiting for Worker finishing jobs. NumDone: " + server.numDone);
-		//Thread.sleep(1000);
+	    	System.out.println("Waiting for Worker finishing jobs. NumDone: " + server.numDone);
+		Thread.sleep(1000);
 	    }
 
             byte[] vector = new byte[server.gradient.length * 8];
@@ -78,6 +77,11 @@ class PSServer implements Watcher, StatCallback {
             if (server.zk.exists("/end" + k, false) == null)
                 server.zk.create("/end" + k, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
+
+        server.zk.delete("/m", -1);
+        for(int i = 0; i < numWorkers; i++)
+            server.zk.delete("/w" + i, -1);
+        server.zk.delete("/end" + (numEpochs - 1), -1);
     }
 
     public synchronized void process(WatchedEvent event) {

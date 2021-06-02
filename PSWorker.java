@@ -34,7 +34,7 @@ class PSWorker implements Watcher, StatCallback {
         for (int i = 4; i < args.length; i++)
             addrs += "," + args[i];
         PSWorker worker = new PSWorker(addrs, workerId);
-        
+
         for(int k = 0; k < numEpochs; k++) {
 	    System.out.println("Worker "+worker.id+" Start Epoch "+k);
             while(worker.zk.exists("/start" + k, false) == null);
@@ -89,8 +89,10 @@ class PSWorker implements Watcher, StatCallback {
 
             ProcessBuilder pb = new ProcessBuilder("python", "update_params.py", "" + this.id);
             Process process = pb.start();
-            if (process.waitFor() != 0)
+            if (process.waitFor() != 0) {
+		System.out.println("python update_params.py exited abnormally");
                 return;
+	    }
             if (this.zk.exists("/ack" + this.id, false) == null)
                 this.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
