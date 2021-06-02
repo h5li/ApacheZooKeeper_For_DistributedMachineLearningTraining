@@ -69,7 +69,9 @@ class PSWorker implements Watcher, StatCallback {
             worker.zk.setData("/w" + workerId, vector, -1);
 
             while(worker.zk.exists("/end" + k, false) == null);
-            worker.zk.delete("/ack" + worker.id, -1);
+	    if (worker.zk.exists("/ack" + worker.id, false) != null)
+                worker.zk.delete("/ack" + worker.id, -1);
+
         }
     }
 

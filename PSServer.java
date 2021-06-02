@@ -59,8 +59,8 @@ class PSServer implements Watcher, StatCallback {
             if (k > 0)
                 server.zk.delete("/end" + (k - 1), -1);
             while (server.numDone != numWorkers) {
-	    	//System.out.println("Waiting for Worker finishing jobs. NumDone: " + server.numDone);
-		//Thread.sleep(1000);
+	    	System.out.println("Waiting for Worker finishing jobs. NumDone: " + server.numDone);
+		Thread.sleep(1000);
 	    }
 
             byte[] vector = new byte[server.gradient.length * 8];
