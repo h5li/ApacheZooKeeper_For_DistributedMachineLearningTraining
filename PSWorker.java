@@ -40,7 +40,7 @@ class PSWorker implements Watcher, StatCallback {
             while(worker.zk.exists("/start" + k, false) == null);
             worker.zk.exists("/m", true, worker, null);
 
-            ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[2]);
+            ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[2], ""+workerId);
             Process process = pb.start();
             if (process.waitFor() != 0){
 		System.out.println("Python Process Ended");
@@ -49,7 +49,7 @@ class PSWorker implements Watcher, StatCallback {
 
             List<Double> grads = new ArrayList<Double>();
             try {
-                File file = new File("grads.txt");
+                File file = new File("grads"+workerId+".txt");
                 Scanner scanner = new Scanner(file);
                 while (scanner.hasNextDouble()) {
                     grads.add(scanner.nextDouble());
@@ -78,17 +78,18 @@ class PSWorker implements Watcher, StatCallback {
         try {
             byte[] data = this.zk.getData(event.getPath(), false, this.zk.exists(event.getPath(), false));
 
-            FileWriter fw = new FileWriter(new File("grads.txt"), false);
+            FileWriter fw = new FileWriter(new File("grads"+this.id+".txt"), false);
             for (int j = 0; j < data.length / 8; j++) {
                 fw.write(ByteBuffer.wrap(data, 8 * j, 8).getDouble() + "\n");
             }
             fw.close();
 
-            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py");
+            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py", this.id);
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
-            this.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            if (this.zk.exists("/ack", false) == null)
+                this.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         catch(Exception e) {
             e.printStackTrace();

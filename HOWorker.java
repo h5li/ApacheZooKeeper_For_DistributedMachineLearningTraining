@@ -56,14 +56,14 @@ class HOWorker implements Watcher, StatCallback {
             int previousWorkerIdToListen = worker.getWorkerIdToListen();
             worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
 
-            ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[3]);
+            ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[3], ""+workerId);
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
 
             List<Double> grads = new ArrayList<Double>();
             try {
-                File file = new File("grads.txt");
+                File file = new File("grads"+workerId+".txt");
                 Scanner scanner = new Scanner(file);
                 while (scanner.hasNextDouble()) {
                     grads.add(scanner.nextDouble());
@@ -125,7 +125,10 @@ class HOWorker implements Watcher, StatCallback {
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
-            this.zk.create("/start" + this.id + "w" + this.curr_iter, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+
+            String path = "/start" + this.id + "w" + this.curr_iter;
+            if (this.zk.exists(path, false) == null)
+                this.zk.create(path, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         catch (Exception e) {
             e.printStackTrace();
