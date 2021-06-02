@@ -41,11 +41,13 @@ class PSWorker implements Watcher, StatCallback {
             worker.zk.exists("/m", true, worker, null);
 
             ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[2], ""+workerId);
+	    System.out.println("python compute_gradient.py " + args[2] + workerId);
             Process process = pb.start();
             if (process.waitFor() != 0){
 		System.out.println("Python Process Ended");
                 return;
 	    }
+	    System.out.println("Python Process Finished Job Correctly");
 
             List<Double> grads = new ArrayList<Double>();
             try {
@@ -72,6 +74,7 @@ class PSWorker implements Watcher, StatCallback {
     }
 
     public void process(WatchedEvent event) {
+	System.out.println("Enter process() | worker" + this.id + " | event path :" + event.toString());
         if (event.getPath() == null)
             return;
 

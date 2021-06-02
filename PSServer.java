@@ -58,7 +58,10 @@ class PSServer implements Watcher, StatCallback {
 	            server.zk.create("/start" + k, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
             if (k > 0)
                 server.zk.delete("/end" + (k - 1), -1);
-            while (server.numDone != numWorkers);
+            while (server.numDone != numWorkers) {
+	    	//System.out.println("Waiting for Worker finishing jobs. NumDone: " + server.numDone);
+		//Thread.sleep(1000);
+	    }
 
             byte[] vector = new byte[server.gradient.length * 8];
             for (int i = 0; i < server.gradient.length; i++) {
@@ -78,7 +81,7 @@ class PSServer implements Watcher, StatCallback {
     }
 
     public synchronized void process(WatchedEvent event) {
-	    if (event.getPath() == null)
+	if (event.getPath() == null)
             return;
 
         try {
