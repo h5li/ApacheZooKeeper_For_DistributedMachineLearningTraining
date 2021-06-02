@@ -56,7 +56,7 @@ class HOWorker implements Watcher, StatCallback {
             int previousWorkerIdToListen = worker.getWorkerIdToListen();
             worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
 
-            ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[3]);
+            ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[3], ""+workerId);
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
