@@ -63,7 +63,7 @@ class HOWorker implements Watcher, StatCallback {
 
             List<Double> grads = new ArrayList<Double>();
             try {
-                File file = new File("grads.txt");
+                File file = new File("grads"+workerId+".txt");
                 Scanner scanner = new Scanner(file);
                 while (scanner.hasNextDouble()) {
                     grads.add(scanner.nextDouble());
