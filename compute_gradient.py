@@ -7,6 +7,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('data_file', type=str)
 args = parser.parse_args()
 
+print("python process started")
 df = pd.read_csv(args.data_file, header=None)
 
 X = np.array(df[df[0] == 0])[:, 1:]
@@ -24,6 +25,7 @@ if os.path.exists('params.npy'):
         w = np.load(f)
 
 gradient = -0.00001 * np.sum(np.multiply(X, h(w) - y), axis=0)
+print("grad computed")
 with open('grads.txt', 'w+') as f:
     for i in range(785):
         f.write(str(gradient[i]) + '\n')

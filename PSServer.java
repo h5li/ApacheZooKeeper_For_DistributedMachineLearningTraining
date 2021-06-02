@@ -34,6 +34,7 @@ class PSServer implements Watcher, StatCallback {
 
         int numWorkers = Integer.parseInt(args[0]);
         int numEpochs = Integer.parseInt(args[1]);
+	System.out.println(numWorkers + " : " + numEpochs);
         String addrs = args[2];
         for (int i = 3; i < args.length; i++)
             addrs += "," + args[i];
@@ -50,6 +51,7 @@ class PSServer implements Watcher, StatCallback {
         for (int k = 0; k < numEpochs; k++) {
             for (int i = 0; i < numWorkers; i++)
                 server.zk.exists("/w" + i, true, server, null);
+	    System.out.println("Server Epoch "+k);
             server.numDone = 0;
 
             if (server.zk.exists("/start" + k, false) == null)

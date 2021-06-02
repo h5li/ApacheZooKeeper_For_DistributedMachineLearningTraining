@@ -36,13 +36,16 @@ class PSWorker implements Watcher, StatCallback {
         PSWorker worker = new PSWorker(addrs, workerId);
         
         for(int k = 0; k < numEpochs; k++) {
+	    System.out.println("Worker "+worker.id+" Start Epoch "+k);
             while(worker.zk.exists("/start" + k, false) == null);
             worker.zk.exists("/m", true, worker, null);
 
             ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[2]);
             Process process = pb.start();
-            if (process.waitFor() != 0)
+            if (process.waitFor() != 0){
+		System.out.println("Python Process Ended");
                 return;
+	    }
 
             List<Double> grads = new ArrayList<Double>();
             try {
