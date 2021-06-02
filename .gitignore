@@ -26,4 +26,4 @@ hs_err_pid*
 *.csv
 
 # Shell scripts
-*.sh
+*_experiment.sh
