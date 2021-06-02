@@ -115,13 +115,13 @@ class HOWorker implements Watcher, StatCallback {
     private void writeGradToFile() {
         // This condition means all the data needs to get the updated all the grad.
         try {
-            FileWriter fw = new FileWriter(new File("grads.txt"), false);
+            FileWriter fw = new FileWriter(new File("grads"+this.id+".txt"), false);
             for (int j = 0; j < this.grads.size(); j++) {
                 fw.write(this.grads.get(j) + "\n");
             }
             fw.close();
 
-            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py");
+            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py", "" + this.id);
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;

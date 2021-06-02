@@ -6,7 +6,7 @@ parser.add_argument('iterations', type=int)
 args = parser.parse_args()
 
 with open('ps_experiment.sh', 'w') as f:
-    f.write('#!/bin/sh\n\njavac -cp \".:jar_files/*:\" *.java\n')
+    f.write('#!/bin/sh\n\njavac -cp \".:jar_files/*:\" PSServer.java PSWorker.java\n')
     prefix = 'java -cp \".:jar_files/*:\" '
     f.write(prefix + 'PSServer ' + str(args.num_workers) + ' ' + str(args.iterations) + ' localhost:2181')
     for worker in range(args.num_workers):

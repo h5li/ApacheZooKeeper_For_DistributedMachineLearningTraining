@@ -84,11 +84,11 @@ class PSWorker implements Watcher, StatCallback {
             }
             fw.close();
 
-            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py", this.id);
+            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py", "" + this.id);
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
-            if (this.zk.exists("/ack", false) == null)
+            if (this.zk.exists("/ack" + this.id, false) == null)
                 this.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         catch(Exception e) {

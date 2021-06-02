@@ -21,8 +21,8 @@ def h(w):
     return 1 / (1 + np.exp(-np.matmul(X, w)))
 
 w = np.zeros((785, 1))
-if os.path.exists('params.npy'):
-    with open('params.npy', 'rb') as f:
+if os.path.exists('params{}.npy'.format(args.worker_id)):
+    with open('params{}.npy'.format(args.worker_id), 'rb') as f:
         w = np.load(f)
 
 gradient = -0.00001 * np.sum(np.multiply(X, h(w) - y), axis=0)
