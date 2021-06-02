@@ -85,7 +85,7 @@ class PSWorker implements Watcher, StatCallback {
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
-            if (this.zk.exists("/ack", false) == null)
+            if (this.zk.exists("/ack" + this.id, false) == null)
                 this.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         catch(Exception e) {
