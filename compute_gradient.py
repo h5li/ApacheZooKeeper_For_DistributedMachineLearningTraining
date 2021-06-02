@@ -5,6 +5,7 @@ import pandas as pd
 
 parser = argparse.ArgumentParser()
 parser.add_argument('data_file', type=str)
+parser.add_argument('worker_id', type=str)
 args = parser.parse_args()
 
 df = pd.read_csv(args.data_file, header=None)
@@ -24,6 +25,6 @@ if os.path.exists('params.npy'):
         w = np.load(f)
 
 gradient = -0.00001 * np.sum(np.multiply(X, h(w) - y), axis=0)
-with open('grads.txt', 'w+') as f:
+with open('grads'+args.worker_id+'.txt', 'w+') as f:
     for i in range(785):
         f.write(str(gradient[i]) + '\n')

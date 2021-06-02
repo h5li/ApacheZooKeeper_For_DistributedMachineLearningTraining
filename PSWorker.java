@@ -39,7 +39,7 @@ class PSWorker implements Watcher, StatCallback {
             while(worker.zk.exists("/start" + k, false) == null);
             worker.zk.exists("/m", true, worker, null);
 
-            ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[2]);
+            ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[2], ""+workerId);
             Process process = pb.start();
             if (process.waitFor() != 0)
                 return;
