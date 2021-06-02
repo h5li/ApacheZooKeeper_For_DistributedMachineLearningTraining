@@ -52,7 +52,8 @@ class PSServer implements Watcher, StatCallback {
                 server.zk.exists("/w" + i, true, server, null);
             server.numDone = 0;
 
-	        server.zk.create("/start" + k, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            if (server.zk.exists("/start" + k, false) == null)
+	            server.zk.create("/start" + k, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
             if (k > 0)
                 server.zk.delete("/end" + (k - 1), -1);
             while (server.numDone != numWorkers);
