@@ -59,7 +59,9 @@ class PSServer implements Watcher, StatCallback {
             if (k > 0)
                 server.zk.delete("/end" + (k - 1), -1);
             long workerWait = System.nanoTime();
-            while (server.numDone != numWorkers);
+            while (server.numDone != numWorkers)
+                Thread.sleep(1);
+
             workerWait = System.nanoTime() - workerWait;
             System.out.println("Server waited for workers for " + workerWait + " ns in iteration " + k);
 
