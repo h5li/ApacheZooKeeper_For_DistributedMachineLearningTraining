@@ -54,7 +54,9 @@ class HOWorker implements Watcher, StatCallback {
             while (worker.zk.exists("/w" + i, false) == null);
         }
         
+        long workerTime = System.nanoTime();
         for(int k = 0; k < numEpochs; k++) {
+            long epochStartTime = System.nanoTime();
 	        System.out.println("Worker " + workerId + " started epoch" + k);
             worker.curr_iter = k;
 	        worker.grads = null;
@@ -62,13 +64,17 @@ class HOWorker implements Watcher, StatCallback {
             int previousWorkerIdToListen = worker.getWorkerIdToListen();
             worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
 
+            long pythonStartTime = System.nanoTime();
             ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[3], ""+workerId);
             Process process = pb.start();
             if (process.waitFor() != 0) {
 		        System.out.println("Python Process exited unexpectedly");
                 return;
 	        }
+            long pythonEndTime = System.nanoTime();
+            System.out.println("Worker " + worker.id + " waited for python Process for " + (pythonEndTime - pythonStartTime) + " in epoch " + k);
 
+            long raedGradStartTime = System.nanoTime();
             List<Double> grads = new ArrayList<Double>();
             try {
                 File file = new File("grads"+workerId+".txt");
@@ -81,6 +87,8 @@ class HOWorker implements Watcher, StatCallback {
             }
 
             worker.grads = grads;
+            long raedGradEndTime = System.nanoTime();
+            System.out.println("Worker " + workerId + " spends " + (readGradEndTime - readGradStartTime) + " reading grads");
             // String path = "/compute" + worker.id + "w" + worker.curr_iter;
             // if (worker.zk.exists(path, false) == null)
             //     worker.zk.create(path, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
@@ -91,6 +99,7 @@ class HOWorker implements Watcher, StatCallback {
 		    //         Thread.sleep(1000);
 		    //     }
             // }
+            long writeGradStartTime = System.nanoTime();
 	        if (workerId == 0) {
                 worker.writeGradToZnode(0);
             }
@@ -103,6 +112,10 @@ class HOWorker implements Watcher, StatCallback {
                     worker.writeGradToFile();
                 }
             }
+            long writeGradEndTime = System.nanoTime();
+            System.out.println("Worker " + worker.id + " spends " + (writeGradEndTime - writeGradStartTime) + " writing to znode /w" + worker.id);
+
+            
 
 	    
             for (int i = 0; i < numWorker; i++) {
@@ -112,6 +125,8 @@ class HOWorker implements Watcher, StatCallback {
 		            Thread.sleep(1000);
 		        }
             }
+            long epochEndTime = System.nanoTime();
+            System.out.println("Worker " + worker.id + " stay in epoch " + k + " for " + (epochEndTime - epochStartTime));
         }
     }
 
@@ -178,6 +193,7 @@ class HOWorker implements Watcher, StatCallback {
 	    System.out.println("Enter process() | worker" + this.id + " | event path :" + event.toString());
         if (event.getPath() == null)
             return;
+        long processStartTime = System.nanoTime();
         int previousWorkerIdToListen = this.getWorkerIdToListen();
         this.zk.exists("/w" + previousWorkerIdToListen, true, this, null);
         try {
@@ -235,6 +251,8 @@ class HOWorker implements Watcher, StatCallback {
         catch(Exception e) {
             e.printStackTrace();
         }
+        long processEndTime = System.nanoTime();
+        System.out.println("Worker " + this.id + "enters process() for " + (processEndTime - processStartTime) + " in epoch " + this.curr_iter);
     }
 
     public void processResult(int rc, String path, Object ctx, Stat stat) {
