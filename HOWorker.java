@@ -27,7 +27,7 @@ class HOWorker implements Watcher, StatCallback {
         this.numWorker = numWorker;
         this.grads = null;
         this.curr_iter = 0;
-	this.previousGrad = null;
+	    this.previousGrad = null;
         OPEN_ACL_UNSAFE.add(new ACL(Perms.ALL, Ids.ANYONE_ID_UNSAFE));
     }
 
@@ -44,7 +44,7 @@ class HOWorker implements Watcher, StatCallback {
         for (int i = 5; i < args.length; i++)
             addrs += "," + args[i];
         HOWorker worker = new HOWorker(addrs, workerId, numWorker);
-	System.out.println("Worker " + workerId + " started");
+	    System.out.println("Worker " + workerId + " started");
         
         if (worker.zk.exists("/w" + workerId, false) == null) {
             worker.zk.create("/w" + workerId, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
@@ -55,18 +55,19 @@ class HOWorker implements Watcher, StatCallback {
         }
         
         for(int k = 0; k < numEpochs; k++) {
-	    System.out.println("Worker " + workerId + " started epoch" + k);
+	        System.out.println("Worker " + workerId + " started epoch" + k);
             worker.curr_iter = k;
-	    worker.grads = null;
+	        worker.grads = null;
+            worker.previousGrad = null;
             int previousWorkerIdToListen = worker.getWorkerIdToListen();
             worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
 
             ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[3], ""+workerId);
             Process process = pb.start();
             if (process.waitFor() != 0) {
-		System.out.println("Python Process exited unexpectedly");
+		        System.out.println("Python Process exited unexpectedly");
                 return;
-	    }
+	        }
 
             List<Double> grads = new ArrayList<Double>();
             try {
@@ -80,32 +81,38 @@ class HOWorker implements Watcher, StatCallback {
             }
 
             worker.grads = grads;
-            String path = "/compute" + worker.id + "w" + worker.curr_iter;
-            if (worker.zk.exists(path, false) == null)
-                worker.zk.create(path, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-            for (int i = 0; i < numWorker; i++) {
-                while (worker.zk.exists("/compute" + i + "w" + k, false) == null) {
-            	    // worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
-		    System.out.println("Worker " + workerId + " Waiting for worker " + i + " to finish TRAINING" + k);
-		    Thread.sleep(1000);
-		}
-            }
-	    if (workerId == 0)
+            // String path = "/compute" + worker.id + "w" + worker.curr_iter;
+            // if (worker.zk.exists(path, false) == null)
+            //     worker.zk.create(path, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            // for (int i = 0; i < numWorker; i++) {
+            //     while (worker.zk.exists("/compute" + i + "w" + k, false) == null) {
+            // 	    // worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
+		    //         System.out.println("Worker " + workerId + " Waiting for worker " + i + " to finish TRAINING" + k);
+		    //         Thread.sleep(1000);
+		    //     }
+            // }
+	        if (workerId == 0) {
                 worker.writeGradToZnode(0);
+            }
+            else if(worker.previousGrad != null) {
+                for (int i = 0; i < worker.previousGrad.size(); i++) {
+                    worker.grads.set(i, worker.grads.get(i) + worker.previousGrad.get(i));
+                }
+                worker.writeGradToZnode(1);
+                if (worker.id == numWorker - 1) {
+                    worker.writeGradToFile();
+                }
+            }
 
 	    
             for (int i = 0; i < numWorker; i++) {
                 while (worker.zk.exists("/start" + i + "w" + k, false) == null) {
             	    // worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
-		    System.out.println("Worker " + workerId + " Waiting for worker " + i + " to finish epoch" + k);
-		    Thread.sleep(1000);
-		}
+		            System.out.println("Worker " + workerId + " Waiting for worker " + i + " to finish epoch" + k);
+		            Thread.sleep(1000);
+		        }
             }
-	    //worker.zk.delete("/start" + workerId + "w" + k, -1);
         }
-	//for (int k = 0; k < numEpochs; k++) {
-	//    worker.zk.delete("/start" + workerId + "w" + k, -1);
-	//}
     }
 
     private List<Double> convertByteToDouble(byte[] data) {
@@ -127,7 +134,7 @@ class HOWorker implements Watcher, StatCallback {
         //byte[] byteRep = ByteBuffer.allocate(8).putInt(statusCode).array();
         //for (int j = 8; j > 0; j--)
         //    vector[vector.length - j] = byteRep[8 - j];
-	vector[vector.length - 1] = (byte)statusCode;
+	    vector[vector.length - 1] = (byte)statusCode;
         this.zk.setData("/w" + this.id, vector, -1);
     }
 
@@ -143,7 +150,7 @@ class HOWorker implements Watcher, StatCallback {
     }
 
     private void writeGradToFile() {
-	System.out.println("Enter writeGradToFile() | worker" + this.id + " | iteration: " + this.curr_iter); 
+	    System.out.println("Enter writeGradToFile() | worker" + this.id + " | iteration: " + this.curr_iter); 
         // This condition means all the data needs to get the updated all the grad.
         try {
             FileWriter fw = new FileWriter(new File("grads"+this.id+".txt"), false);
@@ -167,26 +174,28 @@ class HOWorker implements Watcher, StatCallback {
     }
 
     public void process(WatchedEvent event) {
-	System.out.println("Enter process() | worker" + this.id + " | event path :" + event.toString());
-        // worker.zk.create();
-        int previousWorkerIdToListen = this.getWorkerIdToListen();
-        this.zk.exists("/w" + previousWorkerIdToListen, true, this, null);
-        // worker.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+	    System.out.println("Enter process() | worker" + this.id + " | event path :" + event.toString());
         if (event.getPath() == null)
             return;
-
+        int previousWorkerIdToListen = this.getWorkerIdToListen();
+        this.zk.exists("/w" + previousWorkerIdToListen, true, this, null);
         try {
             byte[] data = this.zk.getData(event.getPath(), false, this.zk.exists(event.getPath(), false));
 
-            if (data[data.length - 1] == 0 ) {
+            if (data[data.length - 1] == 0 && this.id == 1) {
                 
-                if (this.id == 1) {
-                    List<Double> previousGrad = this.convertByteToDouble(data);
+                List<Double> previousGrad = this.convertByteToDouble(data);
+                this.previousGrad = previousGrad;
+                if (this.grads == null) {
+                    System.out.println("Worker " + this.id + " recieves update from Worker " + previousWorkerIdToListen + ", but waiting for himslef.");
+                }
+                else {
                     for (int i = 0; i < previousGrad.size(); i++) {
                         this.grads.set(i, this.grads.get(i) + previousGrad.get(i));
                     }
                     this.writeGradToZnode(1);
                 }
+
             }
             else if (data[data.length - 1] == 1) {
                 if (this.id == 0) {
@@ -197,14 +206,21 @@ class HOWorker implements Watcher, StatCallback {
                 }
                 else {
                     List<Double> previousGrad = this.convertByteToDouble(data);
-                    for (int i = 0; i < previousGrad.size(); i++) {
-                        this.grads.set(i, this.grads.get(i) + previousGrad.get(i));
+                    this.previousGrad = previousGrad;
+                    if (this.grads != null) {
+                        for (int i = 0; i < previousGrad.size(); i++) {
+                            this.grads.set(i, this.grads.get(i) + previousGrad.get(i));
+                        }
+                        this.writeGradToZnode(1);
+    
+                        if (this.id == this.numWorker - 1) {
+                            this.writeGradToFile();
+                        }
                     }
-                    this.writeGradToZnode(1);
+                    else {
+                        System.out.println("Worker " + this.id + " recieves update from Worker " + previousWorkerIdToListen + ", but waiting for himslef.");
+                    }
 
-                    if (this.id == this.numWorker - 1) {
-                        this.writeGradToFile();
-                    }
                 }
             }
             else if(this.id > 0 && this.id < this.numWorker -1 ) {
