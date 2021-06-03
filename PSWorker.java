@@ -22,6 +22,7 @@ class PSWorker implements Watcher, StatCallback {
         this.id = id;
         OPEN_ACL_UNSAFE.add(new ACL(Perms.ALL, Ids.ANYONE_ID_UNSAFE));
     }
+
     public static void main(String[] args) throws KeeperException, InterruptedException, IOException {
         if (args.length < 4) {
             System.err.println("USAGE: PSWorker workerNumber numEpochs dataFile [host:port ...]");
@@ -36,18 +37,18 @@ class PSWorker implements Watcher, StatCallback {
         PSWorker worker = new PSWorker(addrs, workerId);
 
         for(int k = 0; k < numEpochs; k++) {
-	    System.out.println("Worker "+worker.id+" Start Epoch "+k);
-            while(worker.zk.exists("/start" + k, false) == null);
+            while(worker.zk.exists("/start" + k, false) == null && worker.zk.exists("/m", false) == null);
             worker.zk.exists("/m", true, worker, null);
+            System.out.println("Worker " + worker.id + " Start Epoch " + k);
 
-            ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[2], ""+workerId);
-	    System.out.println("python compute_gradient.py " + args[2] + workerId);
+            ProcessBuilder pb = new ProcessBuilder("python3", "compute_gradient.py", args[2], ""+workerId);
             Process process = pb.start();
-            if (process.waitFor() != 0){
-		System.out.println("Python Process Ended");
+            int status = process.waitFor();
+            if (status != 0) {
+                System.out.println("Python Process Ended Abnormally: " + status);
                 return;
-	    }
-	    System.out.println("Python Process Finished Job Correctly");
+            }
+            System.out.println("Python Process Finished Job Correctly");
 
             List<Double> grads = new ArrayList<Double>();
             try {
@@ -76,7 +77,7 @@ class PSWorker implements Watcher, StatCallback {
     }
 
     public void process(WatchedEvent event) {
-	System.out.println("Enter process() | worker" + this.id + " | event path :" + event.toString());
+        System.out.println("Enter process() | worker" + this.id + " | event path :" + event.toString());
         if (event.getPath() == null)
             return;
 
@@ -89,7 +90,7 @@ class PSWorker implements Watcher, StatCallback {
             }
             fw.close();
 
-            ProcessBuilder pb = new ProcessBuilder("python", "update_params.py", "" + this.id);
+            ProcessBuilder pb = new ProcessBuilder("python3", "update_params.py", "" + this.id);
             Process process = pb.start();
             if (process.waitFor() != 0) {
 		System.out.println("python update_params.py exited abnormally");

@@ -50,7 +50,7 @@ class PSServer implements Watcher, StatCallback {
         for (int k = 0; k < numEpochs; k++) {
             for (int i = 0; i < numWorkers; i++)
                 server.zk.exists("/w" + i, true, server, null);
-	    System.out.println("Server Epoch "+k);
+            System.out.println("Server Epoch " + k);
             server.numDone = 0;
 
             if (server.zk.exists("/start" + k, false) == null)
@@ -58,9 +58,9 @@ class PSServer implements Watcher, StatCallback {
             if (k > 0)
                 server.zk.delete("/end" + (k - 1), -1);
             while (server.numDone != numWorkers) {
-	    	System.out.println("Waiting for Worker finishing jobs. NumDone: " + server.numDone);
-		Thread.sleep(1000);
-	    }
+                System.out.println("Waiting for Worker finishing jobs. NumDone: " + server.numDone);
+                Thread.sleep(1000);
+            }
 
             byte[] vector = new byte[server.gradient.length * 8];
             for (int i = 0; i < server.gradient.length; i++) {
@@ -85,7 +85,8 @@ class PSServer implements Watcher, StatCallback {
     }
 
     public synchronized void process(WatchedEvent event) {
-	if (event.getPath() == null)
+        System.out.println("Enter process() | server | event path :" + event.toString());
+	    if (event.getPath() == null)
             return;
 
         try {
