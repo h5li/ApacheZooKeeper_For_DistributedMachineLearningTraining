@@ -39,6 +39,7 @@ class PSServer implements Watcher, StatCallback {
             addrs += "," + args[i];
         PSServer server = new PSServer(numWorkers, addrs);
 
+        long serverTime = System.nanoTime();
         if (server.zk.exists("/m", false) == null)
             server.zk.create("/m", null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         for (int i = 0; i < numWorkers; i++) {
@@ -48,19 +49,19 @@ class PSServer implements Watcher, StatCallback {
         }
 
         for (int k = 0; k < numEpochs; k++) {
+            long iterationTime = System.nanoTime();
             for (int i = 0; i < numWorkers; i++)
                 server.zk.exists("/w" + i, true, server, null);
-            System.out.println("Server Epoch " + k);
             server.numDone = 0;
 
             if (server.zk.exists("/start" + k, false) == null)
 	            server.zk.create("/start" + k, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
             if (k > 0)
                 server.zk.delete("/end" + (k - 1), -1);
-            while (server.numDone != numWorkers) {
-                System.out.println("Waiting for Worker finishing jobs. NumDone: " + server.numDone);
-                Thread.sleep(1000);
-            }
+            long workerWait = System.nanoTime();
+            while (server.numDone != numWorkers);
+            workerWait = System.nanoTime() - workerWait;
+            System.out.println("Server waited for workers for " + workerWait + " ns in iteration " + k);
 
             byte[] vector = new byte[server.gradient.length * 8];
             for (int i = 0; i < server.gradient.length; i++) {
@@ -68,29 +69,40 @@ class PSServer implements Watcher, StatCallback {
                 for (int j = 0; j < 8; j++)
                     vector[8 * i + j] = byteRep[j];
             }
+            long setTime = System.nanoTime();
             server.zk.setData("/m", vector, -1);
+            setTime = System.nanoTime() - setTime;
+            System.out.println("Server set time = " + setTime + " ns in iteration " + k);
+            long ackWait = System.nanoTime();
             for (int i = 0; i < numWorkers; i++) {
                 while (server.zk.exists("/ack" + i, false) == null);
             }
+            ackWait = System.nanoTime() - ackWait;
+            System.out.println("Server waited for acks for " + ackWait + " ns in iteration " + k);
 
             server.zk.delete("/start" + k, -1);
             if (server.zk.exists("/end" + k, false) == null)
                 server.zk.create("/end" + k, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            iterationTime = System.nanoTime() - iterationTime;
+            System.out.println("Iteration " + k + " took " + iterationTime + " ns");
         }
 
         server.zk.delete("/m", -1);
         for(int i = 0; i < numWorkers; i++)
             server.zk.delete("/w" + i, -1);
         server.zk.delete("/end" + (numEpochs - 1), -1);
+        serverTime = System.nanoTime() - serverTime;
+        System.out.println("Server total time = " + serverTime + " ns");
     }
 
     public synchronized void process(WatchedEvent event) {
-        System.out.println("Enter process() | server | event path :" + event.toString());
-	    if (event.getPath() == null)
+        String path = event.getPath();
+	    if (path == null)
             return;
 
         try {
-            byte[] data = this.zk.getData(event.getPath(), false, this.zk.exists(event.getPath(), false));
+            long processTime = System.nanoTime();
+            byte[] data = this.zk.getData(path, false, this.zk.exists(path, false));
 
             if (this.numDone == 0) {
                 for (int j = 0; j < this.gradient.length; j++)
@@ -100,6 +112,8 @@ class PSServer implements Watcher, StatCallback {
                     this.gradient[j] += ByteBuffer.wrap(data, 8 * j, 8).getDouble();
             }
             this.numDone++;
+            processTime = System.nanoTime() - processTime;
+            System.out.println("Server process watch event time = " + processTime + " ns");
         }
         catch(Exception e) {
             e.printStackTrace();

@@ -36,19 +36,24 @@ class PSWorker implements Watcher, StatCallback {
             addrs += "," + args[i];
         PSWorker worker = new PSWorker(addrs, workerId);
 
+        long workerTime = System.nanoTime();
         for(int k = 0; k < numEpochs; k++) {
+            long startWait = System.nanoTime();
             while(worker.zk.exists("/start" + k, false) == null && worker.zk.exists("/m", false) == null);
+            startWait = System.nanoTime() - startWait;
+            System.out.println("Worker " + worker.id + " waited for /start for " + startWait + " ns in iteration " + k);
             worker.zk.exists("/m", true, worker, null);
-            System.out.println("Worker " + worker.id + " Start Epoch " + k);
 
             ProcessBuilder pb = new ProcessBuilder("python3", "compute_gradient.py", args[2], ""+workerId);
+            long pythonExecTime = System.nanoTime();
             Process process = pb.start();
             int status = process.waitFor();
+            pythonExecTime = System.nanoTime() - pythonExecTime;
+            System.out.println("Worker " + worker.id + " compute_gradient.py ran for " + pythonExecTime + " ns in iteration " + k);
             if (status != 0) {
-                System.out.println("Python Process Ended Abnormally: " + status);
+                System.out.println("Worker " + worker.id + " compute_gradient.py exited abnormally: " + status);
                 return;
             }
-            System.out.println("Python Process Finished Job Correctly");
 
             List<Double> grads = new ArrayList<Double>();
             try {
@@ -67,20 +72,29 @@ class PSWorker implements Watcher, StatCallback {
                 for (int j = 0; j < 8; j++)
                     vector[8 * i + j] = byteRep[j];
             }
+            long setTime = System.nanoTime();
             worker.zk.setData("/w" + workerId, vector, -1);
+            setTime = System.nanoTime() - setTime;
+            System.out.println("Worker " + worker.id + " set time = " + setTime + " ns in iteration " + k);
 
+            long endWait = System.nanoTime();
             while(worker.zk.exists("/end" + k, false) == null);
+            endWait = System.nanoTime() - endWait;
+            System.out.println("Worker " + worker.id + " waited for /end for " + endWait + " ns in iteration " + k);
             worker.zk.delete("/ack" + worker.id, -1);
         }
+        workerTime = System.nanoTime() - workerTime;
+        System.out.println("Worker " + worker.id + " total time = " + workerTime + " ns");
     }
 
     public void process(WatchedEvent event) {
-        System.out.println("Enter process() | worker" + this.id + " | event path :" + event.toString());
-        if (event.getPath() == null)
+        String path = event.getPath();
+        if (path == null)
             return;
 
         try {
-            byte[] data = this.zk.getData(event.getPath(), false, this.zk.exists(event.getPath(), false));
+            long processTime = System.nanoTime();
+            byte[] data = this.zk.getData(path, false, this.zk.exists(path, false));
 
             FileWriter fw = new FileWriter(new File("grads"+this.id+".txt"), false);
             for (int j = 0; j < data.length / 8; j++) {
@@ -89,13 +103,19 @@ class PSWorker implements Watcher, StatCallback {
             fw.close();
 
             ProcessBuilder pb = new ProcessBuilder("python3", "update_params.py", "" + this.id);
+            long pythonExecTime = System.nanoTime();
             Process process = pb.start();
-            if (process.waitFor() != 0) {
-		System.out.println("python update_params.py exited abnormally");
+            int status = process.waitFor();
+            pythonExecTime = System.nanoTime() - pythonExecTime;
+            System.out.println("Worker " + this.id + " update_params.py ran for " + pythonExecTime + " ns");
+            if (status != 0) {
+                System.out.println("Worker " + this.id + " update_params.py exited abnormally: " + status);
                 return;
-	    }
+            }
             if (this.zk.exists("/ack" + this.id, false) == null)
                 this.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            processTime = System.nanoTime() - processTime;
+            System.out.println("Worker " + this.id + " process watch event time = " + processTime + " ns");
         }
         catch(Exception e) {
             e.printStackTrace();
