@@ -124,7 +124,7 @@ class HOWorker implements Watcher, StatCallback {
     }
 
     private void writeGradToZnode(int statusCode) throws KeeperException, InterruptedException {
-	System.out.println("worker" + this.id + " writes grad to /w" + this.id + " with status " + statusCode + " in epoch " + this.curr_iter); 
+	    System.out.println("worker" + this.id + " writes grad to /w" + this.id + " with status " + statusCode + " in epoch " + this.curr_iter); 
         byte[] vector = new byte[this.grads.size() * 8 + 1];
         for (int i = 0; i < this.grads.size(); i++) {
             byte[] byteRep = ByteBuffer.allocate(8).putDouble(grads.get(i)).array();
@@ -165,6 +165,7 @@ class HOWorker implements Watcher, StatCallback {
                 return;
 
             String path = "/start" + this.id + "w" + this.curr_iter;
+            System.out.println("Created znode " + "/start" + this.id + "w" + this.curr_iter);
             if (this.zk.exists(path, false) == null)
                 this.zk.create(path, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
