@@ -81,7 +81,8 @@ class PSWorker implements Watcher, StatCallback {
             while(worker.zk.exists("/end" + k, false) == null);
             endWait = System.nanoTime() - endWait;
             System.out.println("Worker " + worker.id + " waited for /end for " + endWait + " ns in iteration " + k);
-            worker.zk.delete("/ack" + worker.id, -1);
+            if (worker.zk.exists("/ack" + worker.id, false) != null)
+                worker.zk.delete("/ack" + worker.id, -1);
         }
         workerTime = System.nanoTime() - workerTime;
         System.out.println("Worker " + worker.id + " total time = " + workerTime + " ns");
