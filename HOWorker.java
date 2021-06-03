@@ -18,6 +18,7 @@ class HOWorker implements Watcher, StatCallback {
     public int numWorker;
     public List<Double> grads;
     public int curr_iter;
+    public List<Double> previousGrad;
     public static final List<ACL> OPEN_ACL_UNSAFE = new LinkedList<ACL>();
 
     public HOWorker(String addrs, int id, int numWorker) throws KeeperException, IOException {
@@ -26,6 +27,7 @@ class HOWorker implements Watcher, StatCallback {
         this.numWorker = numWorker;
         this.grads = null;
         this.curr_iter = 0;
+	this.previousGrad = null;
         OPEN_ACL_UNSAFE.add(new ACL(Perms.ALL, Ids.ANYONE_ID_UNSAFE));
     }
 
@@ -55,6 +57,7 @@ class HOWorker implements Watcher, StatCallback {
         for(int k = 0; k < numEpochs; k++) {
 	    System.out.println("Worker " + workerId + " started epoch" + k);
             worker.curr_iter = k;
+	    worker.grads = null;
             int previousWorkerIdToListen = worker.getWorkerIdToListen();
             worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
 
@@ -77,7 +80,20 @@ class HOWorker implements Watcher, StatCallback {
             }
 
             worker.grads = grads;
-            worker.writeGradToZnode(0);
+            String path = "/compute" + worker.id + "w" + worker.curr_iter;
+            if (worker.zk.exists(path, false) == null)
+                worker.zk.create(path, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            for (int i = 0; i < numWorker; i++) {
+                while (worker.zk.exists("/compute" + i + "w" + k, false) == null) {
+            	    // worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
+		    System.out.println("Worker " + workerId + " Waiting for worker " + i + " to finish TRAINING" + k);
+		    Thread.sleep(1000);
+		}
+            }
+	    if (workerId == 0)
+                worker.writeGradToZnode(0);
+
+	    
             for (int i = 0; i < numWorker; i++) {
                 while (worker.zk.exists("/start" + i + "w" + k, false) == null) {
             	    // worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
@@ -152,6 +168,10 @@ class HOWorker implements Watcher, StatCallback {
 
     public void process(WatchedEvent event) {
 	System.out.println("Enter process() | worker" + this.id + " | event path :" + event.toString());
+        // worker.zk.create();
+        int previousWorkerIdToListen = this.getWorkerIdToListen();
+        this.zk.exists("/w" + previousWorkerIdToListen, true, this, null);
+        // worker.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         if (event.getPath() == null)
             return;
 
@@ -194,10 +214,6 @@ class HOWorker implements Watcher, StatCallback {
                 this.writeGradToFile();
             }
 
-            // worker.zk.create();
-            int previousWorkerIdToListen = this.getWorkerIdToListen();
-            this.zk.exists("/w" + previousWorkerIdToListen, true, this, null);
-            // worker.zk.create("/ack" + this.id, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         catch(Exception e) {
             e.printStackTrace();
