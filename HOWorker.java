@@ -42,6 +42,7 @@ class HOWorker implements Watcher, StatCallback {
         for (int i = 5; i < args.length; i++)
             addrs += "," + args[i];
         HOWorker worker = new HOWorker(addrs, workerId, numWorker);
+	System.out.println("Worker " + workerId + " started");
         
         if (worker.zk.exists("/w" + workerId, false) == null) {
             worker.zk.create("/w" + workerId, null, OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
@@ -52,14 +53,17 @@ class HOWorker implements Watcher, StatCallback {
         }
         
         for(int k = 0; k < numEpochs; k++) {
+	    System.out.println("Worker " + workerId + " started epoch" + k);
             worker.curr_iter = k;
             int previousWorkerIdToListen = worker.getWorkerIdToListen();
             worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
 
             ProcessBuilder pb = new ProcessBuilder("python", "compute_gradient.py", args[3], ""+workerId);
             Process process = pb.start();
-            if (process.waitFor() != 0)
+            if (process.waitFor() != 0) {
+		System.out.println("Python Process exited unexpectedly");
                 return;
+	    }
 
             List<Double> grads = new ArrayList<Double>();
             try {
@@ -75,9 +79,17 @@ class HOWorker implements Watcher, StatCallback {
             worker.grads = grads;
             worker.writeGradToZnode(0);
             for (int i = 0; i < numWorker; i++) {
-                while (worker.zk.exists("/start" + i + "w" + k, false) == null);
+                while (worker.zk.exists("/start" + i + "w" + k, false) == null) {
+            	    // worker.zk.exists("/w" + previousWorkerIdToListen, true, worker, null);
+		    System.out.println("Worker " + workerId + " Waiting for worker " + i + " to finish epoch" + k);
+		    Thread.sleep(1000);
+		}
             }
+	    //worker.zk.delete("/start" + workerId + "w" + k, -1);
         }
+	//for (int k = 0; k < numEpochs; k++) {
+	//    worker.zk.delete("/start" + workerId + "w" + k, -1);
+	//}
     }
 
     private List<Double> convertByteToDouble(byte[] data) {
@@ -89,15 +101,17 @@ class HOWorker implements Watcher, StatCallback {
     }
 
     private void writeGradToZnode(int statusCode) throws KeeperException, InterruptedException {
+	System.out.println("worker" + this.id + " writes grad to /w" + this.id + " with status " + statusCode + " in epoch " + this.curr_iter); 
         byte[] vector = new byte[this.grads.size() * 8 + 1];
         for (int i = 0; i < this.grads.size(); i++) {
             byte[] byteRep = ByteBuffer.allocate(8).putDouble(grads.get(i)).array();
             for (int j = 0; j < 8; j++)
                 vector[8 * i + j] = byteRep[j];
         }
-        byte[] byteRep = ByteBuffer.allocate(8).putInt(statusCode).array();
-        for (int j = 8; j > 0; j--)
-            vector[vector.length - j] = byteRep[8 - j];
+        //byte[] byteRep = ByteBuffer.allocate(8).putInt(statusCode).array();
+        //for (int j = 8; j > 0; j--)
+        //    vector[vector.length - j] = byteRep[8 - j];
+	vector[vector.length - 1] = (byte)statusCode;
         this.zk.setData("/w" + this.id, vector, -1);
     }
 
@@ -113,11 +127,12 @@ class HOWorker implements Watcher, StatCallback {
     }
 
     private void writeGradToFile() {
+	System.out.println("Enter writeGradToFile() | worker" + this.id + " | iteration: " + this.curr_iter); 
         // This condition means all the data needs to get the updated all the grad.
         try {
             FileWriter fw = new FileWriter(new File("grads"+this.id+".txt"), false);
             for (int j = 0; j < this.grads.size(); j++) {
-                fw.write(this.grads.get(j) + "\n");
+                fw.write(this.grads.get(j)/this.numWorker + "\n");
             }
             fw.close();
 
@@ -136,6 +151,7 @@ class HOWorker implements Watcher, StatCallback {
     }
 
     public void process(WatchedEvent event) {
+	System.out.println("Enter process() | worker" + this.id + " | event path :" + event.toString());
         if (event.getPath() == null)
             return;
 
