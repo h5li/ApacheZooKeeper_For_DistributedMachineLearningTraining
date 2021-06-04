@@ -43,7 +43,7 @@ class Cleaner implements Watcher, StatCallback {
         String addrs = args[4];
         for (int i = 5; i < args.length; i++)
             addrs += "," + args[i];
-        HOWorker worker = new HOWorker(addrs, workerId, numWorker);
+        Cleaner worker = new Cleaner(addrs, workerId, numWorker);
 
         for (int i = 0; i < numWorker; i++) {
             for (int j = 0; j < numEpochs; j++) {
