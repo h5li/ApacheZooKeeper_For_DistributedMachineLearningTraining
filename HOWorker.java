@@ -74,7 +74,7 @@ class HOWorker implements Watcher, StatCallback {
             long pythonEndTime = System.nanoTime();
             System.out.println("Worker " + worker.id + " waited for python Process for " + (pythonEndTime - pythonStartTime) + " in epoch " + k);
 
-            long raedGradStartTime = System.nanoTime();
+            long readGradStartTime = System.nanoTime();
             List<Double> grads = new ArrayList<Double>();
             try {
                 File file = new File("grads"+workerId+".txt");
@@ -87,7 +87,7 @@ class HOWorker implements Watcher, StatCallback {
             }
 
             worker.grads = grads;
-            long raedGradEndTime = System.nanoTime();
+            long readGradEndTime = System.nanoTime();
             System.out.println("Worker " + workerId + " spends " + (readGradEndTime - readGradStartTime) + " reading grads");
             // String path = "/compute" + worker.id + "w" + worker.curr_iter;
             // if (worker.zk.exists(path, false) == null)
