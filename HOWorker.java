@@ -139,7 +139,7 @@ class HOWorker implements Watcher, StatCallback {
     }
 
     private void writeGradToZnode(int statusCode) throws KeeperException, InterruptedException {
-	    System.out.println("worker" + this.id + " writes grad to /w" + this.id + " with status " + statusCode + " in epoch " + this.curr_iter); 
+	    System.out.println("Worker " + this.id + " writes grad to /w" + this.id + " with status " + statusCode + " in epoch " + this.curr_iter); 
         byte[] vector = new byte[this.grads.size() * 8 + 1];
         for (int i = 0; i < this.grads.size(); i++) {
             byte[] byteRep = ByteBuffer.allocate(8).putDouble(grads.get(i)).array();
@@ -252,7 +252,7 @@ class HOWorker implements Watcher, StatCallback {
             e.printStackTrace();
         }
         long processEndTime = System.nanoTime();
-        System.out.println("Worker " + this.id + "enters process() for " + (processEndTime - processStartTime) + " in epoch " + this.curr_iter);
+        System.out.println("Worker " + this.id + " enters process() for " + (processEndTime - processStartTime) + " in epoch " + this.curr_iter);
     }
 
     public void processResult(int rc, String path, Object ctx, Stat stat) {
